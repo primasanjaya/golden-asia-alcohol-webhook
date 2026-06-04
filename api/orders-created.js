@@ -42,7 +42,7 @@ async function productHasAlcoholTag(productId) {
 
 function isLocalPickup(order) {
   const lines = order.shipping_lines ?? [];
-  if (lines.length === 0) return true; // no shipping = pickup
+  // Must have exactly a pickup shipping line — no shipping line or delivery = cancel
   return lines.some((l) => {
     const t = (l.title ?? "").toLowerCase();
     const c = (l.code ?? "").toLowerCase();
