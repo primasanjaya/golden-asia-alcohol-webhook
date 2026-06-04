@@ -49,63 +49,88 @@ function isLocalPickup(order) {
   });
 }
 
-async function refundAlcoholItems(order, alcoholLineItemIds) {
-  const orderId = order.id;
-  const orderNumber = order.order_number ?? orderId;
+async function cancelOrder(orderId, orderNumber) {
+  console.log(`Cancelling original order ${orderNumber}`);
+  await shopifyPost(`orders/${orderId}/cancel.json`, {
+    reason: "other",
+    email: false, // we'll notify via draft order invoice instead
+    restock: true,
+    note: "Cancelled by system — alcohol items require store pickup. New draft order sent to customer.",
+  });
+  console.log(`Order ${orderNumber} cancelled and stock restocked.`);
+}
 
-  // Build refund line items for alcohol only, with restock
-  const refundLineItems = order.line_items
-    .filter((item) => alcoholLineItemIds.includes(item.id))
-    .map((item) => ({
-      line_item_id: item.id,
-      quantity: item.quantity,
-      restock_type: "return",        // restores inventory
-      location_id: item.location_id, // required for restock
-    }));
+async function createPickupDraftOrder(order, alcoholItemIds) {
+  const orderNumber = order.order_number ?? order.id;
+  const customer = order.customer;
 
-  log(`Refunding ${refundLineItems.length} alcohol item(s) from order ${orderNumber}`);
+  // Build line items — all items (alcohol + non-alcohol), since they all go into the new pickup order
+  const lineItems = order.line_items.map((item) => ({
+    variant_id: item.variant_id,
+    quantity: item.quantity,
+    price: item.price,
+    title: item.title,
+  }));
 
-  // Calculate refund amount for alcohol items only
-  const refundAmount = order.line_items
-    .filter((item) => alcoholLineItemIds.includes(item.id))
-    .reduce((sum, item) => sum + parseFloat(item.price) * item.quantity, 0)
-    .toFixed(2);
-
-  const note =
-    "⚠️ ALKOHOLITUOTTEET POISTETTU TILAUKSESTA / ALCOHOL ITEMS REMOVED ⚠️\n\n" +
-    "Alkoholituotteitasi ei voida toimittaa — ne on noudettava myymälästä henkilökohtaisesti lain mukaan. " +
-    "Muut tuotteesi käsitellään normaalisti.\n\n" +
-    "👉 Noutaaksesi alkoholituotteet: Suurpellon puistokatu 14 L3, Espoo\n" +
-    "Tai tee uusi tilaus osoitteessa goldenasia.fi ja valitse NOUTO MYYMÄLÄSTÄ.\n\n" +
+  const customMessage =
+    "⚠️ Tilauksesi on muutettu / Your order has been updated ⚠️\n\n" +
+    "Alkuperäinen tilauksesi sisälsi alkoholituotteita, joita ei lain mukaan voida toimittaa kotiin. " +
+    "Olemme peruuttaneet alkuperäisen tilauksesi ja luoneet uuden tilauksen noutoa varten. " +
+    "Maksa alla olevan laskun mukaan ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
+    "📍 Nouto: Suurpellon puistokatu 14 L3, Espoo\n" +
+    "📞 +358 40 360 6359 (Puhelin / SMS / WhatsApp)\n\n" +
     "---\n\n" +
-    "Your alcohol items have been removed from this order — by law, alcohol cannot be delivered and must be picked up in person. " +
-    "Your other items will be processed normally.\n\n" +
-    "👉 To pick up your alcohol: Suurpellon puistokatu 14 L3, Espoo\n" +
-    "Or reorder at goldenasia.fi and select LOCAL STORE PICKUP.\n\n" +
-    "Sorry for the inconvenience! / Pahoittelemme häiriötä!";
+    "Your original order contained alcohol which cannot be delivered by law. " +
+    "We have cancelled the original order and created this new pickup order for all your items. " +
+    "Please pay the invoice below and contact us to arrange pickup.\n\n" +
+    "📍 Pickup: Suurpellon puistokatu 14 L3, Espoo\n" +
+    "📞 +358 40 360 6359 (Phone / SMS / WhatsApp)";
 
-  await shopifyPost(`orders/${orderId}/refunds.json`, {
-    refund: {
-      notify: true,
-      note,
-      shipping: { full_refund: false },
-      refund_line_items: refundLineItems,
-      transactions: [
-        {
-          parent_id: order.payment_gateway_names?.[0],
-          amount: refundAmount,
-          kind: "refund",
-          gateway: order.payment_gateway_names?.[0] ?? "manual",
-        },
+  const draftOrderPayload = {
+    draft_order: {
+      line_items: lineItems,
+      customer: customer ? { id: customer.id } : undefined,
+      shipping_address: order.shipping_address,
+      billing_address: order.billing_address,
+      email: order.email,
+      // Local pickup — zero-cost shipping line
+      shipping_line: {
+        title: "Local Pickup",
+        price: "0.00",
+        custom: true,
+      },
+      note: `Recreated from order ${orderNumber} — alcohol pickup enforcement`,
+      note_attributes: [
+        { name: "original_order", value: String(orderNumber) },
+        { name: "reason", value: "alcohol_pickup_required" },
       ],
+      tags: "alcohol-pickup-required",
+      send_invoice: true,
+      invoice_send_fulfillment: false,
+      invoice_url: true,
+    },
+  };
+
+  console.log(`Creating draft pickup order for customer from order ${orderNumber}`);
+  const result = await shopifyPost("draft_orders.json", draftOrderPayload);
+  const draftOrder = result.draft_order;
+
+  if (!draftOrder) {
+    console.error("Failed to create draft order:", JSON.stringify(result));
+    return;
+  }
+
+  console.log(`Draft order ${draftOrder.name} created. Sending invoice to ${order.email}`);
+
+  // Send invoice email with custom message
+  await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
+    draft_order_invoice: {
+      to: order.email,
+      custom_message: customMessage,
     },
   });
 
-  log(`Order ${orderNumber}: alcohol items refunded and stock restored.`);
-}
-
-function log(msg) {
-  console.log(msg);
+  console.log(`Invoice sent to ${order.email} for draft order ${draftOrder.name}`);
 }
 
 function verifyWebhook(rawBody, hmacHeader) {
@@ -134,11 +159,11 @@ export default async function handler(req, res) {
   const orderNumber = order.order_number ?? orderId;
 
   if (isLocalPickup(order)) {
-    log(`Order ${orderNumber}: local pickup — allowed.`);
+    console.log(`Order ${orderNumber}: local pickup — allowed.`);
     return res.status(200).send("ok");
   }
 
-  // Find which line items are alcohol
+  // Check if any line item is alcohol
   const alcoholItemIds = (
     await Promise.all(
       (order.line_items ?? [])
@@ -151,12 +176,17 @@ export default async function handler(req, res) {
   ).filter(Boolean);
 
   if (alcoholItemIds.length === 0) {
-    log(`Order ${orderNumber}: no alcohol — allowed.`);
+    console.log(`Order ${orderNumber}: no alcohol — allowed.`);
     return res.status(200).send("ok");
   }
 
-  log(`Order ${orderNumber}: ${alcoholItemIds.length} alcohol item(s) with non-pickup delivery — refunding`);
-  await refundAlcoholItems(order, alcoholItemIds);
+  console.log(`Order ${orderNumber}: alcohol + non-pickup — cancelling and creating pickup draft order`);
+
+  // Cancel original order (restock inventory)
+  await cancelOrder(orderId, orderNumber);
+
+  // Create new draft order with all items + local pickup, send invoice
+  await createPickupDraftOrder(order, alcoholItemIds);
 
   return res.status(200).send("ok");
 }
