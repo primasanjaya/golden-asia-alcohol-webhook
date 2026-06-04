@@ -1,0 +1,72 @@
+{% comment %}
+  ALCOHOL PICKUP ENFORCEMENT — Cart Notice
+
+  HOW TO INSTALL:
+  1. Shopify Admin → Online Store → Themes → Edit code
+  2. In "Snippets", click "Add a new snippet", name it: alcohol-pickup-notice
+  3. Paste this entire file into it
+  4. Open your cart template: Sections → cart-drawer.liquid OR Templates → cart.liquid
+     (depends on your theme — look for where the checkout button is)
+  5. Just before the closing </form> tag of the cart, add:
+        {% render 'alcohol-pickup-notice' %}
+  6. Save and test by adding an alcohol-tagged product to cart
+{% endcomment %}
+
+{% assign has_alcohol = false %}
+{% for item in cart.items %}
+  {% if item.product.tags contains 'alcohol' %}
+    {% assign has_alcohol = true %}
+    {% break %}
+  {% endif %}
+{% endfor %}
+
+{% if has_alcohol %}
+<div id="alcohol-pickup-notice" style="
+  background-color: #fff3cd;
+  border: 2px solid #e6a817;
+  border-radius: 6px;
+  padding: 14px 18px;
+  margin: 16px 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #333;
+">
+  <strong>⚠️ Alkoholi — Vain nouto myymälästä</strong><br>
+  <strong>⚠️ Alcohol — Store pickup only</strong><br><br>
+  Ostoskorissasi on alkoholituotteita. Alkoholia ei voi toimittaa postissa — valitse kassalla <strong>nouto myymälästä</strong>.<br>
+  <em>Your cart contains alcohol. Alcohol cannot be shipped — please select <strong>local pickup</strong> at checkout.</em><br><br>
+  📍 <strong>Suurpellon puistokatu 14 L3, Espoo</strong>
+</div>
+
+<script>
+// Warn if customer tries to proceed without reading the notice
+(function () {
+  function attachCheckoutWarning() {
+    var checkoutBtns = document.querySelectorAll(
+      '[name="checkout"], .cart__checkout-button, .cart-checkout-button, a[href="/checkout"], button[data-cart-checkout]'
+    );
+    checkoutBtns.forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        var confirmed = confirm(
+          'Ostoskorissasi on alkoholituotteita.\n' +
+          'Valitse kassalla NOUTO MYYMÄLÄSTÄ — emme voi toimittaa alkoholia postissa.\n\n' +
+          'Your cart contains alcohol.\n' +
+          'Please select LOCAL PICKUP at checkout — alcohol cannot be shipped.\n\n' +
+          'Jatka / Continue?'
+        );
+        if (!confirmed) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      });
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachCheckoutWarning);
+  } else {
+    attachCheckoutWarning();
+  }
+})();
+</script>
+{% endif %}

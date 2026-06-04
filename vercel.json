@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/orders-created.js": {
+      "maxDuration": 30
+    }
+  }
+}
