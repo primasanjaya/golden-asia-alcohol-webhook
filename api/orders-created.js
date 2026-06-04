@@ -55,10 +55,16 @@ async function cancelOrder(orderId, orderNumber) {
   await shopifyPost(`orders/${orderId}/cancel.json`, {
     reason: "other",
     note:
-      "Tilaus peruutettu: alkoholituotteita ei voi toimittaa postissa. " +
-      "Tee uusi tilaus ja valitse nouto myymälästä. / " +
-      "Order cancelled: alcohol cannot be shipped. " +
-      "Please reorder and select local store pickup.",
+      "⚠️ TILAUS PERUUTETTU / ORDER CANCELLED ⚠️\n\n" +
+      "Ostoskorissasi oli alkoholituotteita, joita ei lain mukaan voi toimittaa kotiin. " +
+      "Alkoholi on noudettava myymälästä henkilökohtaisesti.\n\n" +
+      "👉 Tee uusi tilaus osoitteessa goldenasia.fi ja valitse kassalla: NOUTO MYYMÄLÄSTÄ\n" +
+      "📍 Myymälä: Suurpellon puistokatu 14 L3, Espoo\n\n" +
+      "---\n\n" +
+      "Your order contained alcohol which cannot be delivered by law — it must be picked up in person.\n\n" +
+      "👉 Please reorder at goldenasia.fi and select LOCAL STORE PICKUP at checkout\n" +
+      "📍 Store: Suurpellon puistokatu 14 L3, Espoo\n\n" +
+      "Sorry for the inconvenience! / Pahoittelemme häiriötä!",
     email: true,
     refund: true,
   });
