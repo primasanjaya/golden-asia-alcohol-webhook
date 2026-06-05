@@ -53,11 +53,21 @@ async function cancelOrder(orderId, orderNumber) {
   console.log(`Cancelling original order ${orderNumber}`);
   await shopifyPost(`orders/${orderId}/cancel.json`, {
     reason: "other",
-    email: false, // we'll notify via draft order invoice instead
+    email: true, // notify customer of cancellation
     restock: true,
-    note: "Cancelled by system — alcohol items require store pickup. New draft order sent to customer.",
+    note:
+      "⚠️ Tilaus peruutettu / Order cancelled\n\n" +
+      "Tilauksesi sisälsi alkoholituotteita, joita ei lain mukaan voi toimittaa kotiin. " +
+      "Olemme luoneet sinulle uuden tilauksen noutoa varten ja lähetämme laskun pian.\n\n" +
+      "📍 Nouto: Suurpellon puistokatu 14 L3, Espoo\n" +
+      "📞 +358 40 360 6359\n\n" +
+      "---\n\n" +
+      "Your order contained alcohol which cannot be delivered by law. " +
+      "We have created a new pickup order for you and will send an invoice shortly.\n\n" +
+      "📍 Pickup: Suurpellon puistokatu 14 L3, Espoo\n" +
+      "📞 +358 40 360 6359",
   });
-  console.log(`Order ${orderNumber} cancelled and stock restocked.`);
+  console.log(`Order ${orderNumber} cancelled, stock restocked, customer notified.`);
 }
 
 async function createPickupDraftOrder(order, alcoholItemIds) {
@@ -105,9 +115,6 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
         { name: "reason", value: "alcohol_pickup_required" },
       ],
       tags: "alcohol-pickup-required",
-      send_invoice: true,
-      invoice_send_fulfillment: false,
-      invoice_url: true,
     },
   };
 
@@ -122,11 +129,14 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
 
   console.log(`Draft order ${draftOrder.name} created. Sending invoice to ${order.email}`);
 
-  // Send invoice email with custom message
   await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
     draft_order_invoice: {
       to: order.email,
-      custom_message: customMessage,
+      custom_message:
+        "Hei! Olemme luoneet uuden tilauksen noutoa varten. Katso lasku alta ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
+        "Hi! We have created a new pickup order for you. Please see the invoice below and contact us to arrange pickup.\n\n" +
+        "📍 Suurpellon puistokatu 14 L3, Espoo\n" +
+        "📞 +358 40 360 6359 (Phone / SMS / WhatsApp)",
     },
   });
 
