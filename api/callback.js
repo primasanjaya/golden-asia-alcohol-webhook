@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       client_id: process.env.SHOPIFY_CLIENT_ID,
-      client_secret: process.env.SHOPIFY_WEBHOOK_SECRET,
+      client_secret: process.env.SHOPIFY_CLIENT_SECRET,
       code,
     }),
   });
