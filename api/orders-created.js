@@ -146,29 +146,7 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
     return;
   }
 
-  console.log(`Draft order ${draftOrder.name} created. Attempting to send invoice...`);
-
-  // Retry sending invoice up to 3 times with increasing delays (total ~16s)
-  const delays = [3000, 5000, 8000];
-  for (const delay of delays) {
-    await new Promise((resolve) => setTimeout(resolve, delay));
-    try {
-      await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
-        draft_order_invoice: {
-          custom_message:
-            "Hei! Olemme luoneet uuden tilauksen noutoa varten. Katso lasku alta ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
-            "Hi! We have created a new pickup order for you. Please see the invoice below and contact us to arrange pickup.\n\n" +
-            "Suurpellon puistokatu 14 L3, Espoo\n" +
-            "+358 40 360 6359 (Phone / SMS / WhatsApp)",
-        },
-      });
-      console.log(`Invoice sent to ${order.email} for draft order ${draftOrder.name}`);
-      return;
-    } catch (err) {
-      console.warn(`Invoice attempt failed (retrying): ${err.message}`);
-    }
-  }
-  console.error(`All invoice attempts failed — send manually from Shopify admin (Drafts -> ${draftOrder.name})`);
+  console.log(`Draft order ${draftOrder.name} created — send invoice manually from Shopify Admin > Drafts`);
 }
 
 function verifyWebhook(rawBody, hmacHeader) {
