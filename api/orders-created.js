@@ -73,9 +73,25 @@ async function cancelOrder(orderId, orderNumber) {
   console.log(`Order ${orderNumber} cancelled, stock restocked, customer notified.`);
 }
 
+async function draftAlreadyExists(orderNumber) {
+  const data = await shopifyGet(`draft_orders.json?status=open&limit=50`);
+  const drafts = data.draft_orders ?? [];
+  return drafts.some((d) =>
+    (d.note_attributes ?? []).some(
+      (a) => a.name === "original_order" && a.value === String(orderNumber)
+    )
+  );
+}
+
 async function createPickupDraftOrder(order, alcoholItemIds) {
   const orderNumber = order.order_number ?? order.id;
   const customer = order.customer;
+
+  // Idempotency check — don't create duplicate drafts on webhook retries
+  if (await draftAlreadyExists(orderNumber)) {
+    console.log(`Draft already exists for order ${orderNumber} — skipping`);
+    return;
+  }
 
   // Build line items — all items (alcohol + non-alcohol), since they all go into the new pickup order
   const lineItems = order.line_items.map((item) => ({
@@ -130,24 +146,29 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
     return;
   }
 
-  console.log(`Draft order ${draftOrder.name} created. Waiting for calculation...`);
-  await new Promise((resolve) => setTimeout(resolve, 25000)); // wait 25 seconds
+  console.log(`Draft order ${draftOrder.name} created. Attempting to send invoice...`);
 
-  console.log(`Sending invoice to ${order.email}`);
-  try {
-  await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
-    draft_order_invoice: {
-      custom_message:
-        "Hei! Olemme luoneet uuden tilauksen noutoa varten. Katso lasku alta ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
-        "Hi! We have created a new pickup order for you. Please see the invoice below and contact us to arrange pickup.\n\n" +
-        "Suurpellon puistokatu 14 L3, Espoo\n" +
-        "+358 40 360 6359 (Phone / SMS / WhatsApp)",
-    },
-  });
-  console.log(`Invoice sent to ${order.email} for draft order ${draftOrder.name}`);
-  } catch (err) {
-    console.error(`Failed to send invoice for draft order ${draftOrder.name}:`, err.message);
+  // Retry sending invoice up to 3 times with increasing delays (total ~16s)
+  const delays = [3000, 5000, 8000];
+  for (const delay of delays) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
+        draft_order_invoice: {
+          custom_message:
+            "Hei! Olemme luoneet uuden tilauksen noutoa varten. Katso lasku alta ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
+            "Hi! We have created a new pickup order for you. Please see the invoice below and contact us to arrange pickup.\n\n" +
+            "Suurpellon puistokatu 14 L3, Espoo\n" +
+            "+358 40 360 6359 (Phone / SMS / WhatsApp)",
+        },
+      });
+      console.log(`Invoice sent to ${order.email} for draft order ${draftOrder.name}`);
+      return;
+    } catch (err) {
+      console.warn(`Invoice attempt failed (retrying): ${err.message}`);
+    }
   }
+  console.error(`All invoice attempts failed — send manually from Shopify admin (Drafts -> ${draftOrder.name})`);
 }
 
 function verifyWebhook(rawBody, hmacHeader) {
