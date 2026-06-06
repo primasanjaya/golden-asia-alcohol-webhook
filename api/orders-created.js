@@ -130,8 +130,10 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
     return;
   }
 
-  console.log(`Draft order ${draftOrder.name} created. Sending invoice to ${order.email}`);
+  console.log(`Draft order ${draftOrder.name} created. Waiting for calculation...`);
+  await new Promise((resolve) => setTimeout(resolve, 25000)); // wait 25 seconds
 
+  console.log(`Sending invoice to ${order.email}`);
   try {
   await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
     draft_order_invoice: {
