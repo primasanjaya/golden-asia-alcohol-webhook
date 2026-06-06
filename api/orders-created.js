@@ -199,14 +199,12 @@ export default async function handler(req, res) {
 
   console.log(`Order ${orderNumber}: alcohol + non-pickup — cancelling and creating pickup draft order`);
 
-  // Always return 200 first so Shopify doesn't retry the webhook
-  res.status(200).send("ok");
-
-  // Process in background
   try {
     await cancelOrder(orderId, orderNumber);
     await createPickupDraftOrder(order, alcoholItemIds);
   } catch (err) {
     console.error(`Error processing order ${orderNumber}:`, err.message);
   }
+
+  return res.status(200).send("ok");
 }
