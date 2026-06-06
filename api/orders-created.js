@@ -132,6 +132,7 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
 
   console.log(`Draft order ${draftOrder.name} created. Sending invoice to ${order.email}`);
 
+  try {
   await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
     draft_order_invoice: {
       custom_message:
@@ -141,8 +142,10 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
         "+358 40 360 6359 (Phone / SMS / WhatsApp)",
     },
   });
-
   console.log(`Invoice sent to ${order.email} for draft order ${draftOrder.name}`);
+  } catch (err) {
+    console.error(`Failed to send invoice for draft order ${draftOrder.name}:`, err.message);
+  }
 }
 
 function verifyWebhook(rawBody, hmacHeader) {
@@ -194,11 +197,14 @@ export default async function handler(req, res) {
 
   console.log(`Order ${orderNumber}: alcohol + non-pickup — cancelling and creating pickup draft order`);
 
-  // Cancel original order (restock inventory)
-  await cancelOrder(orderId, orderNumber);
+  // Always return 200 first so Shopify doesn't retry the webhook
+  res.status(200).send("ok");
 
-  // Create new draft order with all items + local pickup, send invoice
-  await createPickupDraftOrder(order, alcoholItemIds);
-
-  return res.status(200).send("ok");
+  // Process in background
+  try {
+    await cancelOrder(orderId, orderNumber);
+    await createPickupDraftOrder(order, alcoholItemIds);
+  } catch (err) {
+    console.error(`Error processing order ${orderNumber}:`, err.message);
+  }
 }
