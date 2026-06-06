@@ -26,7 +26,10 @@ async function shopifyPost(endpoint, body) {
       body: JSON.stringify(body),
     }
   );
-  if (!res.ok) throw new Error(`Shopify POST ${endpoint} failed: ${res.status}`);
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Shopify POST ${endpoint} failed: ${res.status} — ${errText}`);
+  }
   return res.json();
 }
 
