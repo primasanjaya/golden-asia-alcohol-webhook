@@ -131,12 +131,11 @@ async function createPickupDraftOrder(order, alcoholItemIds) {
 
   await shopifyPost(`draft_orders/${draftOrder.id}/send_invoice.json`, {
     draft_order_invoice: {
-      to: order.email,
       custom_message:
         "Hei! Olemme luoneet uuden tilauksen noutoa varten. Katso lasku alta ja ota meihin yhteyttä noutajan sopimiseksi.\n\n" +
         "Hi! We have created a new pickup order for you. Please see the invoice below and contact us to arrange pickup.\n\n" +
-        "📍 Suurpellon puistokatu 14 L3, Espoo\n" +
-        "📞 +358 40 360 6359 (Phone / SMS / WhatsApp)",
+        "Suurpellon puistokatu 14 L3, Espoo\n" +
+        "+358 40 360 6359 (Phone / SMS / WhatsApp)",
     },
   });
 
